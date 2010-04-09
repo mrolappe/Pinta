@@ -59,9 +59,23 @@ namespace Pinta.Core
 			Redo = new Gtk.Action ("Redo", Mono.Unix.Catalog.GetString ("Redo"), null, "gtk-redo");
 			Cut = new Gtk.Action ("Cut", Mono.Unix.Catalog.GetString ("Cut"), null, "gtk-cut");
 			Copy = new Gtk.Action ("Copy", Mono.Unix.Catalog.GetString ("Copy"), null, "gtk-copy");
+
 			Paste = new Gtk.Action ("Paste", Mono.Unix.Catalog.GetString ("Paste"), null, "gtk-paste");
 			PasteIntoNewLayer = new Gtk.Action ("PasteIntoNewLayer", Mono.Unix.Catalog.GetString ("Paste Into New Layer"), null, "gtk-paste");
 			PasteIntoNewImage = new Gtk.Action ("PasteIntoNewImage", Mono.Unix.Catalog.GetString ("Paste Into New Image"), null, "gtk-paste");
+
+			// check every second if there is an image to paste and enable the actions as appropriate
+			GLib.TimeoutHandler checkForImage = delegate {
+				Gtk.Clipboard cb = Gtk.Clipboard.Get (Gdk.Atom.Intern ("CLIPBOARD", false));
+
+				Paste.Sensitive = PasteIntoNewLayer.Sensitive = cb.WaitIsImageAvailable ();
+
+				return true;
+			};
+
+			GLib.Timeout.Add (1000, checkForImage);
+
+
 			EraseSelection = new Gtk.Action ("EraseSelection", Mono.Unix.Catalog.GetString ("Erase Selection"), null, "Menu.Edit.EraseSelection.png");
 			FillSelection = new Gtk.Action ("FillSelection", Mono.Unix.Catalog.GetString ("Fill Selection"), null, "Menu.Edit.FillSelection.png");
 			InvertSelection = new Gtk.Action ("InvertSelection", Mono.Unix.Catalog.GetString ("Invert Selection"), null, "Menu.Edit.InvertSelection.png");
@@ -70,6 +84,10 @@ namespace Pinta.Core
 			
 			Undo.Sensitive = false;
 			Redo.Sensitive = false;
+			Cut.Sensitive = false;
+			Copy.Sensitive = false;
+			Paste.Sensitive = false;
+			PasteIntoNewLayer.Sensitive = false;
 			PasteIntoNewImage.Sensitive = false;
 			InvertSelection.Sensitive = false;
 			Deselect.Sensitive = false;
