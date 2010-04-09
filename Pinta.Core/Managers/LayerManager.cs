@@ -125,6 +125,8 @@ namespace Pinta.Core
 			get { return show_selection; }
 			set {
 				show_selection = value;
+				PintaCore.Actions.Edit.Cut.Sensitive = show_selection;
+				PintaCore.Actions.Edit.Copy.Sensitive = show_selection;
 				PintaCore.Actions.Edit.Deselect.Sensitive = show_selection;
 				PintaCore.Actions.Edit.EraseSelection.Sensitive = show_selection;
 				PintaCore.Actions.Edit.FillSelection.Sensitive = show_selection;
