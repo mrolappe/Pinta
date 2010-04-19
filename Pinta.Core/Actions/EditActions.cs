@@ -27,6 +27,8 @@
 using System;
 using Gtk;
 using Cairo;
+using Mono.Unix;
+
 
 namespace Pinta.Core
 {
@@ -44,7 +46,9 @@ namespace Pinta.Core
 		public Gtk.Action InvertSelection { get; private set; }
 		public Gtk.Action SelectAll { get; private set; }
 		public Gtk.Action Deselect { get; private set; }
-		
+
+		readonly static Gdk.Atom CLIPBOARD_ATOM = Gdk.Atom.Intern ("CLIPBOARD", false);
+
 		public EditActions ()
 		{
 			Gtk.IconFactory fact = new Gtk.IconFactory ();
@@ -55,40 +59,42 @@ namespace Pinta.Core
 			fact.Add ("Menu.Edit.SelectAll.png", new Gtk.IconSet (PintaCore.Resources.GetIcon ("Menu.Edit.SelectAll.png")));
 			fact.AddDefault ();
 			
-			Undo = new Gtk.Action ("Undo", Mono.Unix.Catalog.GetString ("Undo"), null, "gtk-undo");
-			Redo = new Gtk.Action ("Redo", Mono.Unix.Catalog.GetString ("Redo"), null, "gtk-redo");
-			Cut = new Gtk.Action ("Cut", Mono.Unix.Catalog.GetString ("Cut"), null, "gtk-cut");
-			Copy = new Gtk.Action ("Copy", Mono.Unix.Catalog.GetString ("Copy"), null, "gtk-copy");
+			Undo = new Gtk.Action ("Undo", Catalog.GetString ("Undo"), null, "gtk-undo");
+			Redo = new Gtk.Action ("Redo", Catalog.GetString ("Redo"), null, "gtk-redo");
+			Cut = new Gtk.Action ("Cut", Catalog.GetString ("Cut"), null, "gtk-cut");
+			Copy = new Gtk.Action ("Copy", Catalog.GetString ("Copy"), null, "gtk-copy");
 
-			Paste = new Gtk.Action ("Paste", Mono.Unix.Catalog.GetString ("Paste"), null, "gtk-paste");
-			PasteIntoNewLayer = new Gtk.Action ("PasteIntoNewLayer", Mono.Unix.Catalog.GetString ("Paste Into New Layer"), null, "gtk-paste");
-			PasteIntoNewImage = new Gtk.Action ("PasteIntoNewImage", Mono.Unix.Catalog.GetString ("Paste Into New Image"), null, "gtk-paste");
+			Paste = new Gtk.Action ("Paste", Catalog.GetString ("Paste"), null, "gtk-paste");
+			PasteIntoNewLayer = new Gtk.Action ("PasteIntoNewLayer", Catalog.GetString ("Paste Into New Layer"), null, "gtk-paste");
+			PasteIntoNewImage = new Gtk.Action ("PasteIntoNewImage", Catalog.GetString ("Paste Into New Image"), null, "gtk-paste");
 
-			// check every second if there is an image to paste and enable the actions as appropriate
-			GLib.TimeoutHandler checkForImage = delegate {
-				Gtk.Clipboard cb = Gtk.Clipboard.Get (Gdk.Atom.Intern ("CLIPBOARD", false));
+			Paste.Sensitive = false;
+			PasteIntoNewLayer.Sensitive = false;
+			PasteIntoNewImage.Sensitive = false;
 
-				Paste.Sensitive = PasteIntoNewLayer.Sensitive = cb.WaitIsImageAvailable ();
+			var cb = Gtk.Clipboard.Get (CLIPBOARD_ATOM);
 
-				return true;
-			};
+			if (cb.Display.SupportsSelectionNotification ()) {
+				cb.OwnerChange += delegate {
+					// enable paste if image is available
+					Paste.Sensitive = PasteIntoNewLayer.Sensitive = PasteIntoNewImage.Sensitive = cb.WaitIsImageAvailable ();
+				};
+			}
+			else {
+				// paste always enabled if notification not supported
+				Paste.Sensitive = PasteIntoNewLayer.Sensitive = PasteIntoNewImage.Sensitive = true;
+			}
 
-			GLib.Timeout.Add (1000, checkForImage);
-
-
-			EraseSelection = new Gtk.Action ("EraseSelection", Mono.Unix.Catalog.GetString ("Erase Selection"), null, "Menu.Edit.EraseSelection.png");
-			FillSelection = new Gtk.Action ("FillSelection", Mono.Unix.Catalog.GetString ("Fill Selection"), null, "Menu.Edit.FillSelection.png");
-			InvertSelection = new Gtk.Action ("InvertSelection", Mono.Unix.Catalog.GetString ("Invert Selection"), null, "Menu.Edit.InvertSelection.png");
-			SelectAll = new Gtk.Action ("SelectAll", Mono.Unix.Catalog.GetString ("Select All"), null, "Menu.Edit.SelectAll.png");
-			Deselect = new Gtk.Action ("Deselect", Mono.Unix.Catalog.GetString ("Deselect"), null, "Menu.Edit.Deselect.png");
+			EraseSelection = new Gtk.Action ("EraseSelection", Catalog.GetString ("Erase Selection"), null, "Menu.Edit.EraseSelection.png");
+			FillSelection = new Gtk.Action ("FillSelection", Catalog.GetString ("Fill Selection"), null, "Menu.Edit.FillSelection.png");
+			InvertSelection = new Gtk.Action ("InvertSelection", Catalog.GetString ("Invert Selection"), null, "Menu.Edit.InvertSelection.png");
+			SelectAll = new Gtk.Action ("SelectAll", Catalog.GetString ("Select All"), null, "Menu.Edit.SelectAll.png");
+			Deselect = new Gtk.Action ("Deselect", Catalog.GetString ("Deselect"), null, "Menu.Edit.Deselect.png");
 			
 			Undo.Sensitive = false;
 			Redo.Sensitive = false;
 			Cut.Sensitive = false;
 			Copy.Sensitive = false;
-			Paste.Sensitive = false;
-			PasteIntoNewLayer.Sensitive = false;
-			PasteIntoNewImage.Sensitive = false;
 			InvertSelection.Sensitive = false;
 			Deselect.Sensitive = false;
 			EraseSelection.Sensitive = false;
@@ -199,16 +205,26 @@ namespace Pinta.Core
 			PintaCore.Workspace.Invalidate ();
 		}
 
+		private void ShowNoImageOnClipboardDialog ()
+		{
+			var dialog = new MessageDialog (PintaCore.Chrome.MainWindow, DialogFlags.Modal, MessageType.Info,
+			                                ButtonsType.Ok, Catalog.GetString ("There is no image on the clipboard."));
+			dialog.Decorated = false;
+			dialog.Run ();
+			dialog.Destroy ();
+		}
+
 		private void HandlerPintaCoreActionsEditPasteIntoNewLayerActivated (object sender, EventArgs e)
 		{
 			PintaCore.Layers.FinishSelection ();
 
-			Gtk.Clipboard cb = Gtk.Clipboard.Get (Gdk.Atom.Intern ("CLIPBOARD", false));
+			var cb = Gtk.Clipboard.Get (CLIPBOARD_ATOM);
 			Gdk.Pixbuf image = cb.WaitForImage ();
 
-			// TODO: Message window saying no image on clipboard
-			if (image == null)
+			if (image == null) {
+				ShowNoImageOnClipboardDialog ();
 				return;
+			}
 
 			Layer l = PintaCore.Layers.AddNewLayer (string.Empty);
 
@@ -230,11 +246,13 @@ namespace Pinta.Core
 
 			Cairo.ImageSurface old = PintaCore.Layers.CurrentLayer.Surface.Clone ();
 
-			Gtk.Clipboard cb = Gtk.Clipboard.Get (Gdk.Atom.Intern ("CLIPBOARD", false));
+			var cb = Gtk.Clipboard.Get (CLIPBOARD_ATOM);
 			Gdk.Pixbuf image = cb.WaitForImage ();
 
-			if (image == null)
+			if (image == null) {
+				ShowNoImageOnClipboardDialog ();
 				return;
+			}
 
 			Path p;
 			
@@ -266,7 +284,7 @@ namespace Pinta.Core
 				g.Paint ();
 			}
 			
-			Gtk.Clipboard cb = Gtk.Clipboard.Get (Gdk.Atom.Intern ("CLIPBOARD", false));
+			var cb = Gtk.Clipboard.Get (CLIPBOARD_ATOM);
 			cb.Image = dest.ToPixbuf ();
 
 			(src as IDisposable).Dispose ();
