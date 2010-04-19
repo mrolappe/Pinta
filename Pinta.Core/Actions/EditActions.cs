@@ -95,6 +95,8 @@ namespace Pinta.Core
 			Redo.Sensitive = false;
 			Cut.Sensitive = false;
 			Copy.Sensitive = false;
+			Paste.Sensitive = false;
+			PasteIntoNewLayer.Sensitive = false;
 			InvertSelection.Sensitive = false;
 			Deselect.Sensitive = false;
 			EraseSelection.Sensitive = false;
